@@ -182,12 +182,16 @@ func parseParams(q url.Values) (*params, error) {
 	}
 	{
 		cutOffs := q.Get("cutOffs")
-		for _, s := range strings.Split(cutOffs, ",") {
-			s = strings.TrimSpace(s)
-			if s != "" {
-				cutOff, err := strconv.Atoi(s)
-				if err != nil {
-					return nil, fmt.Errorf("can't parse status codes %q: %w", cutOffs, err)
+		if cutOffs != "" {
+			for _, s := range strings.Split(cutOffs, ",") {
+				s = strings.TrimSpace(s)
+				cutOff := -1
+				var err error
+				if s != "" {
+					cutOff, err = strconv.Atoi(s)
+					if err != nil {
+						return nil, fmt.Errorf("can't parse cut-offs %q: %w", cutOffs, err)
+					}
 				}
 				params.cutOffs = append(params.cutOffs, cutOff)
 			}
