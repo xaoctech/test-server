@@ -101,6 +101,26 @@ func (p *params) cutOff() int {
 	return -1
 }
 
+var usage = `Query parameters:
+  - size=n - response data size in bytes (required)
+  - id=s - set session ID. Each request with the same session ID increase internal counter which can be used as index for delays or cut-offs
+  - bin - return binary data with application/octet-stream Content-Type header
+  - delay=<delay> - delay before sending response, supported options:
+    - d0,d1,..dn - use session counter as an index to this array, the last value is used for the rest of requests.
+      Each delay is in time.ParseDuration format (see https://pkg.go.dev/time#ParseDuration), e.g. 1s - 1 second delay, 1ms - 1 millisecond delay
+    - dmin-dmax - random delay in [dmin.Milliseconds(), dmax.Milliseconds()) interval, e.g. 0ms-1s is random delay in [0,999] ms interval
+  - bps=n - limit response to n bytes per second. Response is sent as chunked data with one chunk of <n> bytes sent each second
+  - cutOffs=n1,n2,..nn - simulate data cut-off after given number of bytes is sent by closing the connection.
+    Use session counter as an index to this array, the last value is used for the rest of requests.
+    -1 or empty - no cut-off
+  - codes=sc0,sc1,sc2 - send this HTTP status codes
+    Use session counter as an index to this array, the last value is used for the rest of requests.
+
+E.g. for this query http://<path>?size=1000&id=1&bin&delay=0s,1s,2s&bps=100&cutOffs=,,300,codes=200,500,200 :
+  1st request returns 1000 bytes of binary data in 10 seconds
+  2nd request returns 500 error aftre 1 second
+  3rd and following requests return 300 bytes and  "transfer closed with outstanding read data remaining" error (in curl)`
+
 func parseParams(q url.Values) (*params, error) {
 	params := params{}
 	{
@@ -192,7 +212,6 @@ func parseParams(q url.Values) (*params, error) {
 	params.id = q.Get("id")
 	return &params, nil
 }
-
 func handler() http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
@@ -209,7 +228,9 @@ func handler() http.Handler {
 
 			params, err := parseParams(r.URL.Query())
 			if err != nil {
-				http.Error(w, fmt.Sprintf("Error parsing query string: %s", err.Error()), http.StatusBadRequest)
+				http.Error(
+					w, fmt.Sprintf("Error parsing query string: %s\n%s", err.Error(), usage), http.StatusBadRequest,
+				)
 				return
 			}
 
@@ -274,6 +295,7 @@ func main() {
 	}
 
 	log.Printf("Address: http://127.0.0.1:%d\n", port)
+	log.Printf("%s\n", usage)
 	err := http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
 	if err != nil {
 		log.Fatalln(err)
